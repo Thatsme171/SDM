@@ -1,192 +1,211 @@
-'use strict';
+/*!
+ * mime-types
+ * Copyright(c) 2014 Jonathan Ong
+ * Copyright(c) 2015 Douglas Christopher Wilson
+ * MIT Licensed
+ */
 
-var test = require('tape');
-var v = require('es-value-fixtures');
-var forEach = require('for-each');
-var inspect = require('object-inspect');
+'use strict'
 
-var abs = require('../abs');
-var floor = require('../floor');
-var isFinite = require('../isFinite');
-var isInteger = require('../isInteger');
-var isNaN = require('../isNaN');
-var isNegativeZero = require('../isNegativeZero');
-var max = require('../max');
-var min = require('../min');
-var mod = require('../mod');
-var pow = require('../pow');
-var round = require('../round');
-var sign = require('../sign');
+/**
+ * Module dependencies.
+ * @private
+ */
 
-var maxArrayLength = require('../constants/maxArrayLength');
-var maxSafeInteger = require('../constants/maxSafeInteger');
-var maxValue = require('../constants/maxValue');
+var db = require('mime-db')
+var extname = require('path').extname
+var mimeScore = require('./mimeScore')
 
-test('abs', function (t) {
-	t.equal(abs(-1), 1, 'abs(-1) === 1');
-	t.equal(abs(+1), 1, 'abs(+1) === 1');
-	t.equal(abs(+0), +0, 'abs(+0) === +0');
-	t.equal(abs(-0), +0, 'abs(-0) === +0');
+/**
+ * Module variables.
+ * @private
+ */
 
-	t.end();
-});
+var EXTRACT_TYPE_REGEXP = /^\s*([^;\s]*)(?:;|\s|$)/
+var TEXT_TYPE_REGEXP = /^text\//i
 
-test('floor', function (t) {
-	t.equal(floor(-1.1), -2, 'floor(-1.1) === -2');
-	t.equal(floor(+1.1), 1, 'floor(+1.1) === 1');
-	t.equal(floor(+0), +0, 'floor(+0) === +0');
-	t.equal(floor(-0), -0, 'floor(-0) === -0');
-	t.equal(floor(-Infinity), -Infinity, 'floor(-Infinity) === -Infinity');
-	t.equal(floor(Number(Infinity)), Number(Infinity), 'floor(+Infinity) === +Infinity');
-	t.equal(floor(NaN), NaN, 'floor(NaN) === NaN');
-	t.equal(floor(0), +0, 'floor(0) === +0');
-	t.equal(floor(-0), -0, 'floor(-0) === -0');
-	t.equal(floor(1), 1, 'floor(1) === 1');
-	t.equal(floor(-1), -1, 'floor(-1) === -1');
-	t.equal(floor(1.1), 1, 'floor(1.1) === 1');
-	t.equal(floor(-1.1), -2, 'floor(-1.1) === -2');
-	t.equal(floor(maxValue), maxValue, 'floor(maxValue) === maxValue');
-	t.equal(floor(maxSafeInteger), maxSafeInteger, 'floor(maxSafeInteger) === maxSafeInteger');
+/**
+ * Module exports.
+ * @public
+ */
 
-	t.end();
-});
+exports.charset = charset
+exports.charsets = { lookup: charset }
+exports.contentType = contentType
+exports.extension = extension
+exports.extensions = Object.create(null)
+exports.lookup = lookup
+exports.types = Object.create(null)
+exports._extensionConflicts = []
 
-test('isFinite', function (t) {
-	t.equal(isFinite(0), true, 'isFinite(+0) === true');
-	t.equal(isFinite(-0), true, 'isFinite(-0) === true');
-	t.equal(isFinite(1), true, 'isFinite(1) === true');
-	t.equal(isFinite(Infinity), false, 'isFinite(Infinity) === false');
-	t.equal(isFinite(-Infinity), false, 'isFinite(-Infinity) === false');
-	t.equal(isFinite(NaN), false, 'isFinite(NaN) === false');
+// Populate the extensions/types maps
+populateMaps(exports.extensions, exports.types)
 
-	forEach(v.nonNumbers, function (nonNumber) {
-		t.equal(isFinite(nonNumber), false, 'isFinite(' + inspect(nonNumber) + ') === false');
-	});
+/**
+ * Get the default charset for a MIME type.
+ *
+ * @param {string} type
+ * @return {false|string}
+ */
 
-	t.end();
-});
+function charset (type) {
+  if (!type || typeof type !== 'string') {
+    return false
+  }
 
-test('isInteger', function (t) {
-	forEach([].concat(
-		// @ts-expect-error TS sucks with concat
-		v.nonNumbers,
-		v.nonIntegerNumbers
-	), function (nonInteger) {
-		t.equal(isInteger(nonInteger), false, 'isInteger(' + inspect(nonInteger) + ') === false');
-	});
+  // TODO: use media-typer
+  var match = EXTRACT_TYPE_REGEXP.exec(type)
+  var mime = match && db[match[1].toLowerCase()]
 
-	t.end();
-});
+  if (mime && mime.charset) {
+    return mime.charset
+  }
 
-test('isNaN', function (t) {
-	forEach([].concat(
-		// @ts-expect-error TS sucks with concat
-		v.nonNumbers,
-		v.infinities,
-		v.zeroes,
-		v.integerNumbers
-	), function (nonNaN) {
-		t.equal(isNaN(nonNaN), false, 'isNaN(' + inspect(nonNaN) + ') === false');
-	});
+  // default text/* to utf-8
+  if (match && TEXT_TYPE_REGEXP.test(match[1])) {
+    return 'UTF-8'
+  }
 
-	t.equal(isNaN(NaN), true, 'isNaN(NaN) === true');
+  return false
+}
 
-	t.end();
-});
+/**
+ * Create a full Content-Type header given a MIME type or extension.
+ *
+ * @param {string} str
+ * @return {false|string}
+ */
 
-test('isNegativeZero', function (t) {
-	t.equal(isNegativeZero(-0), true, 'isNegativeZero(-0) === true');
-	t.equal(isNegativeZero(+0), false, 'isNegativeZero(+0) === false');
-	t.equal(isNegativeZero(1), false, 'isNegativeZero(1) === false');
-	t.equal(isNegativeZero(-1), false, 'isNegativeZero(-1) === false');
-	t.equal(isNegativeZero(NaN), false, 'isNegativeZero(NaN) === false');
-	t.equal(isNegativeZero(Infinity), false, 'isNegativeZero(Infinity) === false');
-	t.equal(isNegativeZero(-Infinity), false, 'isNegativeZero(-Infinity) === false');
+function contentType (str) {
+  // TODO: should this even be in this module?
+  if (!str || typeof str !== 'string') {
+    return false
+  }
 
-	forEach(v.nonNumbers, function (nonNumber) {
-		t.equal(isNegativeZero(nonNumber), false, 'isNegativeZero(' + inspect(nonNumber) + ') === false');
-	});
+  var mime = str.indexOf('/') === -1 ? exports.lookup(str) : str
 
-	t.end();
-});
+  if (!mime) {
+    return false
+  }
 
-test('max', function (t) {
-	t.equal(max(1, 2), 2, 'max(1, 2) === 2');
-	t.equal(max(1, 2, 3), 3, 'max(1, 2, 3) === 3');
-	t.equal(max(1, 2, 3, 4), 4, 'max(1, 2, 3, 4) === 4');
-	t.equal(max(1, 2, 3, 4, 5), 5, 'max(1, 2, 3, 4, 5) === 5');
-	t.equal(max(1, 2, 3, 4, 5, 6), 6, 'max(1, 2, 3, 4, 5, 6) === 6');
-	t.equal(max(1, 2, 3, 4, 5, 6, 7), 7, 'max(1, 2, 3, 4, 5, 6, 7) === 7');
+  // TODO: use content-type or other module
+  if (mime.indexOf('charset') === -1) {
+    var charset = exports.charset(mime)
+    if (charset) mime += '; charset=' + charset.toLowerCase()
+  }
 
-	t.end();
-});
+  return mime
+}
 
-test('min', function (t) {
-	t.equal(min(1, 2), 1, 'min(1, 2) === 1');
-	t.equal(min(1, 2, 3), 1, 'min(1, 2, 3) === 1');
-	t.equal(min(1, 2, 3, 4), 1, 'min(1, 2, 3, 4) === 1');
-	t.equal(min(1, 2, 3, 4, 5), 1, 'min(1, 2, 3, 4, 5) === 1');
-	t.equal(min(1, 2, 3, 4, 5, 6), 1, 'min(1, 2, 3, 4, 5, 6) === 1');
+/**
+ * Get the default extension for a MIME type.
+ *
+ * @param {string} type
+ * @return {false|string}
+ */
 
-	t.end();
-});
+function extension (type) {
+  if (!type || typeof type !== 'string') {
+    return false
+  }
 
-test('mod', function (t) {
-	t.equal(mod(1, 2), 1, 'mod(1, 2) === 1');
-	t.equal(mod(2, 2), 0, 'mod(2, 2) === 0');
-	t.equal(mod(3, 2), 1, 'mod(3, 2) === 1');
-	t.equal(mod(4, 2), 0, 'mod(4, 2) === 0');
-	t.equal(mod(5, 2), 1, 'mod(5, 2) === 1');
-	t.equal(mod(6, 2), 0, 'mod(6, 2) === 0');
-	t.equal(mod(7, 2), 1, 'mod(7, 2) === 1');
-	t.equal(mod(8, 2), 0, 'mod(8, 2) === 0');
-	t.equal(mod(9, 2), 1, 'mod(9, 2) === 1');
-	t.equal(mod(10, 2), 0, 'mod(10, 2) === 0');
-	t.equal(mod(11, 2), 1, 'mod(11, 2) === 1');
+  // TODO: use media-typer
+  var match = EXTRACT_TYPE_REGEXP.exec(type)
 
-	t.end();
-});
+  // get extensions
+  var exts = match && exports.extensions[match[1].toLowerCase()]
 
-test('pow', function (t) {
-	t.equal(pow(2, 2), 4, 'pow(2, 2) === 4');
-	t.equal(pow(2, 3), 8, 'pow(2, 3) === 8');
-	t.equal(pow(2, 4), 16, 'pow(2, 4) === 16');
-	t.equal(pow(2, 5), 32, 'pow(2, 5) === 32');
-	t.equal(pow(2, 6), 64, 'pow(2, 6) === 64');
-	t.equal(pow(2, 7), 128, 'pow(2, 7) === 128');
-	t.equal(pow(2, 8), 256, 'pow(2, 8) === 256');
-	t.equal(pow(2, 9), 512, 'pow(2, 9) === 512');
-	t.equal(pow(2, 10), 1024, 'pow(2, 10) === 1024');
+  if (!exts || !exts.length) {
+    return false
+  }
 
-	t.end();
-});
+  return exts[0]
+}
 
-test('round', function (t) {
-	t.equal(round(1.1), 1, 'round(1.1) === 1');
-	t.equal(round(1.5), 2, 'round(1.5) === 2');
-	t.equal(round(1.9), 2, 'round(1.9) === 2');
+/**
+ * Lookup the MIME type for a file path/extension.
+ *
+ * @param {string} path
+ * @return {false|string}
+ */
 
-	t.end();
-});
+function lookup (path) {
+  if (!path || typeof path !== 'string') {
+    return false
+  }
 
-test('sign', function (t) {
-	t.equal(sign(-1), -1, 'sign(-1) === -1');
-	t.equal(sign(+1), +1, 'sign(+1) === +1');
-	t.equal(sign(+0), +0, 'sign(+0) === +0');
-	t.equal(sign(-0), -0, 'sign(-0) === -0');
-	t.equal(sign(NaN), NaN, 'sign(NaN) === NaN');
-	t.equal(sign(Infinity), +1, 'sign(Infinity) === +1');
-	t.equal(sign(-Infinity), -1, 'sign(-Infinity) === -1');
-	t.equal(sign(maxValue), +1, 'sign(maxValue) === +1');
-	t.equal(sign(maxSafeInteger), +1, 'sign(maxSafeInteger) === +1');
+  // get the extension ("ext" or ".ext" or full path)
+  var extension = extname('x.' + path)
+    .toLowerCase()
+    .slice(1)
 
-	t.end();
-});
+  if (!extension) {
+    return false
+  }
 
-test('constants', function (t) {
-	t.equal(typeof maxArrayLength, 'number', 'typeof maxArrayLength === "number"');
-	t.equal(typeof maxSafeInteger, 'number', 'typeof maxSafeInteger === "number"');
-	t.equal(typeof maxValue, 'number', 'typeof maxValue === "number"');
+  return exports.types[extension] || false
+}
 
-	t.end();
-});
+/**
+ * Populate the extensions and types maps.
+ * @private
+ */
+
+function populateMaps (extensions, types) {
+  Object.keys(db).forEach(function forEachMimeType (type) {
+    var mime = db[type]
+    var exts = mime.extensions
+
+    if (!exts || !exts.length) {
+      return
+    }
+
+    // mime -> extensions
+    extensions[type] = exts
+
+    // extension -> mime
+    for (var i = 0; i < exts.length; i++) {
+      var extension = exts[i]
+      types[extension] = _preferredType(extension, types[extension], type)
+
+      // DELETE (eventually): Capture extension->type maps that change as a
+      // result of switching to mime-score.  This is just to help make reviewing
+      // PR #119 easier, and can be removed once that PR is approved.
+      const legacyType = _preferredTypeLegacy(
+        extension,
+        types[extension],
+        type
+      )
+      if (legacyType !== types[extension]) {
+        exports._extensionConflicts.push([extension, legacyType, types[extension]])
+      }
+    }
+  })
+}
+
+// Resolve type conflict using mime-score
+function _preferredType (ext, type0, type1) {
+  var score0 = type0 ? mimeScore(type0, db[type0].source) : 0
+  var score1 = type1 ? mimeScore(type1, db[type1].source) : 0
+
+  return score0 > score1 ? type0 : type1
+}
+
+// Resolve type conflict using pre-mime-score logic
+function _preferredTypeLegacy (ext, type0, type1) {
+  var SOURCE_RANK = ['nginx', 'apache', undefined, 'iana']
+
+  var score0 = type0 ? SOURCE_RANK.indexOf(db[type0].source) : 0
+  var score1 = type1 ? SOURCE_RANK.indexOf(db[type1].source) : 0
+
+  if (
+    exports.types[extension] !== 'application/octet-stream' &&
+    (score0 > score1 ||
+      (score0 === score1 &&
+        exports.types[extension]?.slice(0, 12) === 'application/'))
+  ) {
+    return type0
+  }
+
+  return score0 > score1 ? type0 : type1
+}
