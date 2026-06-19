@@ -1,71 +1,78 @@
 /*!
- * body-parser
- * Copyright(c) 2014-2015 Douglas Christopher Wilson
+ * escape-html
+ * Copyright(c) 2012-2013 TJ Holowaychuk
+ * Copyright(c) 2015 Andreas Lubbe
+ * Copyright(c) 2015 Tiancheng "Timothy" Gu
  * MIT Licensed
  */
 
-'use strict'
+'use strict';
 
 /**
- * @typedef {Object} Parsers
- * @property {Function} json JSON parser
- * @property {Function} raw Raw parser
- * @property {Function} text Text parser
- * @property {Function} urlencoded URL-encoded parser
+ * Module variables.
+ * @private
  */
+
+var matchHtmlRegExp = /["'&<>]/;
 
 /**
  * Module exports.
- * @type {Function & Parsers}
- */
-exports = module.exports = bodyParser
-
-/**
- * JSON parser.
  * @public
  */
-Object.defineProperty(exports, 'json', {
-  configurable: true,
-  enumerable: true,
-  get: () => require('./lib/types/json')
-})
+
+module.exports = escapeHtml;
 
 /**
- * Raw parser.
- * @public
- */
-Object.defineProperty(exports, 'raw', {
-  configurable: true,
-  enumerable: true,
-  get: () => require('./lib/types/raw')
-})
-
-/**
- * Text parser.
- * @public
- */
-Object.defineProperty(exports, 'text', {
-  configurable: true,
-  enumerable: true,
-  get: () => require('./lib/types/text')
-})
-
-/**
- * URL-encoded parser.
- * @public
- */
-Object.defineProperty(exports, 'urlencoded', {
-  configurable: true,
-  enumerable: true,
-  get: () => require('./lib/types/urlencoded')
-})
-
-/**
- * Create a middleware to parse json and urlencoded bodies.
+ * Escape special characters in the given string of html.
  *
- * @deprecated
+ * @param  {string} string The string to escape for inserting into HTML
+ * @return {string}
  * @public
  */
-function bodyParser () {
-  throw new Error('The bodyParser() generic has been split into individual middleware to use instead.')
+
+function escapeHtml(string) {
+  var str = '' + string;
+  var match = matchHtmlRegExp.exec(str);
+
+  if (!match) {
+    return str;
+  }
+
+  var escape;
+  var html = '';
+  var index = 0;
+  var lastIndex = 0;
+
+  for (index = match.index; index < str.length; index++) {
+    switch (str.charCodeAt(index)) {
+      case 34: // "
+        escape = '&quot;';
+        break;
+      case 38: // &
+        escape = '&amp;';
+        break;
+      case 39: // '
+        escape = '&#39;';
+        break;
+      case 60: // <
+        escape = '&lt;';
+        break;
+      case 62: // >
+        escape = '&gt;';
+        break;
+      default:
+        continue;
+    }
+
+    if (lastIndex !== index) {
+      html += str.substring(lastIndex, index);
+    }
+
+    lastIndex = index + 1;
+    html += escape;
+  }
+
+  return lastIndex !== index
+    ? html + str.substring(lastIndex, index)
+    : html;
 }
